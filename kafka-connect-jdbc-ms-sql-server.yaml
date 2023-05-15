@@ -1,0 +1,187 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  #annotations:
+  #  kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert
+  #  kompose.version: 1.26.1 (a9d05d509)
+  #creationTimestamp: null
+  labels:
+    kafka-users-sql-test: connect
+  name: kafka-users-sql-test1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kafka-users-sql-test: connect
+  strategy: {}
+  template:
+    metadata:
+      #annotations:
+      #  kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert
+      #  kompose.version: 1.26.1 (a9d05d509)
+      #creationTimestamp: null
+      labels:
+        kafka-users-sql-test: connect
+    spec:
+      containers:
+        - name: kafka-users-sql-test1
+          image: confluentinc/cp-kafka-connect:7.2.2
+          securityContext: 
+            runAsUser: 0
+          ports:
+            - containerPort: 8083
+          env:
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: "bootstrap.uri:9092"
+            - name: CONNECT_REST_PORT
+              value: "8083"
+            - name: CONNECT_GROUP_ID
+              value: sap-kafka-test
+            - name: CONNECT_KEY_CONVERTER
+              value: io.confluent.connect.protobuf.ProtobufConverter
+            - name: CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL
+              value: "https://your.confluent.boot.azure.confluent.cloud"
+            - name: CONNECT_KEY_CONVERTER_BASIC_AUTH_CREDENTIALS_SOURCE
+              value: USER_INFO
+            - name: CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO
+              value: "api.key:api.secret"
+            - name: CONNECT_VALUE_CONVERTER
+              value: io.confluent.connect.protobuf.ProtobufConverter          
+            - name: CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL
+              value: "https://your.confluent.boot.azure.confluent.cloud"
+            - name: CONNECT_VALUE_CONVERTER_BASIC_AUTH_CREDENTIALS_SOURCE
+              value: USER_INFO
+            - name: CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO
+              value: "api.key:api.secret"
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: sql-kafka-configs-v0012
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: CONNECT_LOG4J_LOGGERS
+              value: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR,log4j.logger.io.confluent.connect.jdbc=DEBUG,org.apache.kafka.connect.runtime=WARN,org.apache.kafka=ERROR
+            - name: CONNECT_OFFSET_FLUSH_INTERVAL_MS
+              value: "10000"
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: sql-kafka-connect-offsets-v0012
+            - name: CONNECT_OFFSET_STORAGE_PARTITIONS
+              value: "25"
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: sql-kafka-users-sql-test-v0012
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: CONNECT_OFFSET_FILE_FILENAME
+              value: /tmp/sap-jdbc-connect.offsets
+            - name: CONNECT_PLUGIN_PATH
+              value: /usr/share/java,/usr/share/confluent-hub-components, /usr/share/confluent-hub-components/confluentinc-kafka-connect-jdbc/lib
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KAFKA_OPTS  # If using RHEL8 as Linux distribution with Confluent Platform 7.2.1, need to specify this parameter
+              value: -Djdk.tls.ephemeralDHKeySize=2048  # See https://docs.confluent.io/platform/7.2.1/installation/versions-interoperability.html#java and https://docs.confluent.io/platform/current/installation/docker/config-reference.html#optional-kconnect-long-settings
+            # Connect Worker
+            - name: CONNECT_SECURITY_PROTOCOL
+              value: SASL_SSL
+            - name: CONNECT_SASL_JAAS_CONFIG
+              value: |
+                     org.apache.kafka.common.security.plain.PlainLoginModule required \
+                     username="api.key" \
+                     password="api.secret";
+            - name: CONNECT_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: https
+            - name: CONNECT_SASL_MECHANISM
+              value: PLAIN
+            - name: CONNECT_REQUEST_TIMEOUT_MS
+              value: "20000"
+            - name: CONNECT_RETRY_BACKOFF_MS
+              value: "500"
+            # Connect Producer
+            - name: CONNECT_PRODUCER_BOOTSTRAP_SERVERS
+              value: "bootstrap.uri:9092"
+            - name: CONNECT_PRODUCER_CLIENT_ID
+              value: connect-worker-sap-jdbc-producer-01
+            - name: CONNECT_PRODUCER_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: https
+            - name: CONNECT_PRODUCER_SASL_MECHANISM
+              value: PLAIN
+            - name: CONNECT_PRODUCER_SASL_JAAS_CONFIG
+              value: |
+                     org.apache.kafka.common.security.plain.PlainLoginModule required \
+                     username="api.key" \
+                     password="api.secret";
+            - name: CONFLUENT_TOPIC_SASL_JAAS_CONFIG
+              value: |
+                     org.apache.kafka.common.security.plain.PlainLoginModule required \
+                     username="api.key" \
+                     password="api.secret";
+            - name: CONNECT_PRODUCER_SECURITY_PROTOCOL
+              value: SASL_SSL
+            - name: CONNECT_PRODUCER_REQUEST_TIMEOUT_MS
+              value: "20000"
+            - name: CONNECT_PRODUCER_RETRY_BACKOFF_MS
+              value: "500"
+          args:
+            - bash
+            - -c
+            - "echo -e \"\ Installing JDBC connector from .zip\" \n
+               curl https://d1i4a15mxbxib1.cloudfront.net/api/plugins/confluentinc/kafka-connect-jdbc/versions/10.5.3/confluentinc-kafka-connect-jdbc-10.5.3.zip --output connector.zip  \n
+               confluent-hub install --no-prompt connector.zip \n
+               cp /usr/share/confluent-hub-components/confluentinc-kafka-connect-jdbc/lib/*.jar /usr/share/java/kafka \n
+               echo -e \"\ Downloading SAP driver\" \n
+               curl https://repo1.maven.org/maven2/com/sap/cloud/db/jdbc/ngdbc/2.13.9/ngdbc-2.13.9.jar -s -o /usr/share/confluent-hub-components/confluentinc-kafka-connect-jdbc/lib/ngdbc-2.13.9.jar \n
+               echo \"Launching Kafka Connect worker\"\n
+               /etc/confluent/docker/run & \n
+               sleep 90; \n                             \n
+               echo \"Waiting for Kafka Connect to start listening on localhost\" \n
+               while ! nc -z localhost 8083; do   \n
+                echo \"Sleep 5\" \n
+                sleep 5 \n
+               done \n
+               echo \"Kafka Connect is ready\" \n
+               echo \" Creating Kafka Connect JDBC Source\"        \n
+               curl -X POST -H \"Content-Type: application/json\" \
+                       -H \"Accept: application/json\" \
+               --data '{\"name\": \"kafkadbconn002\", \
+                        \"config\": {\"connector.class\": \"io.confluent.connect.jdbc.JdbcSourceConnector\",  \
+                                     \"connection.url\": \"jdbc:sqlserver://ordersdatabase.database.windows.net;databaseName=ordersdb;\",  \
+                                      \"connection.user\": \"adminUser\", \                                      
+                                      \"connection.password\": \"AdminAdmin123!\", \
+                                      \"connection.attempts\": 3,                           \
+                                      \"connection.backoff.ms\": 10000, \
+                                      \"poll.interval.ms\": 5000,       \
+                                      \"db.timezone\": \"America/Chicago\", \                                      
+                                      \"table.whitelist\": \"[dbo].[users]\",      \
+                                      \"mode\": \"timestamp\",                              \
+                                      \"table.types\": \"TABLE\",                           \
+                                      \"batch.max.rows\": \"100\",                           \
+                                      \"topic.prefix\": \"event-sap-hana-\",  \
+                                      \"topic.creation.default.replication.factor\": \"-1\", \
+                                      \"topic.creation.default.partitions\": \"-1\", \
+                                      \"key.converter\": \"org.apache.kafka.connect.json.JsonConverter\",  \
+                                      \"key.converter.schemas.enable\": \"false\",  \
+                                      \"key.converter.schema.registry.url\": \"https://your.confluent.boot.azure.confluent.cloud\",  \
+                                      \"key.converter.basic.auth.credentials.source\": \"USER_INFO\",  \
+                                      \"key.converter.schema.registry.basic.auth.user.info\": \"api.key:api.secret\", \
+                                      \"value.converter\": \"org.apache.kafka.connect.json.JsonConverter\",  \
+                                      \"value.converter.schemas.enable\": \"false\",  \
+                                      \"value.converter.schema.registry.url\": \"https://your.confluent.boot.azure.confluent.cloud\",  \
+                                      \"value.converter.basic.auth.credentials.source\": \"USER_INFO\",  \
+                                      \"value.converter.schema.registry.basic.auth.user.info\": \"api.key:api.secret\", \
+                                      \"validate.non.null\": \"false\",  \
+                                      \"timestamp.column.name\": \"created\",  \
+                                      \"confluent.topic.replication.factor\": 3,  \
+                                      \"confluent.topic.bootstrap.servers\" : \"bootstrap.uri:9092\",
+                                      \"confluent.topic.security.protocol\": \"SASL_SSL\",   \
+                                      \"confluent.topic.ssl.endpoint.identification.algorithm\": \"https\",   \
+                                      \"confluent.topic.sasl.mechanism\": \"PLAIN\",  \
+                                      \"confluent.topic.request.timeout.ms\": \"20000\",  \
+                                      \"confluent.topic.retry.backoff.ms\": \"500\" }}'
+                                      http://localhost:8083/connectors \n              
+                \n
+               sleep infinity \n"
+          resources: {}
+      hostname: connect-1
+      restartPolicy: Always      
+status: {}
